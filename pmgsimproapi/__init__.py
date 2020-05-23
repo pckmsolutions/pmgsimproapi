@@ -57,8 +57,8 @@ class SimProApi(ApiBase):
     def get_all_catelogue_groups(self, params=None):
         return self._get_all(self.get_catelogue_groups_page, params)
 
-    def get_catelogue_groups_page(self, page, page_size, params=None):
-        return self._get_page(f'{self.company_prefix}/catalogGroups/', page, page_size, params)
+    def get_catelogue_groups_page(self, page, page_size, params=None, columns=None):
+        return self._get_page(f'{self.company_prefix}/catalogGroups/', page, page_size, params=params, columns=columns)
 
     def create_catelougue_group(self, name, parent_id = None):
         data={'Name': name}
@@ -113,24 +113,8 @@ class SimProApi(ApiBase):
     def get_all_catelogue_items(self, params=None):
         return self._get_all(self.get_catelogue_items_page, params)
 
-    def get_catelogue_items_page(self, page, page_size, params=None):
-        return self._get_page(f'{self.company_prefix}/catalogs/', page, page_size, params)
-
-    def _get_all(self, page_getter, params=None):
-        def next_page(page_number):
-            ret = page_getter(page=page_number, page_size=self.MAX_PAGE_SIZE, params=params)
-            return ret['items'], ret['page'] < ret['pages']
-
-        return get_all_from_pages(next_page)
-
-    def _get_page(self, path, page, page_size, params=None):
-        items, headers = self.get(path,
-                params={**dict(page=page, pageSize=page_size), **(params or {})},
-                response_handler=json_headers_response_hander
-                )
-
-        return dict(items=items, total_count=int(headers['Result-Total']), pages=int(headers['Result-Pages']),
-                page_size=int(headers.get('Result-Count', 0)), page=page)
+    def get_catelogue_items_page(self, page, page_size, params=None, columns=None):
+        return self._get_page(f'{self.company_prefix}/catalogs/', page, page_size, params=params, columns=columns)
 
     def create_catelogue_item(self, data):
         return self.post(f'{self.company_prefix}/catalogs/', data=data)
@@ -212,11 +196,14 @@ class SimProApi(ApiBase):
         return self.suppliers_cache.items
 
     # Pricing
-    def get_pricing_tiers(self):
-        return self.get(f'{self.company_prefix}/setup/materials/pricingTiers/')
-
     def get_pricing_tier(self, id):
         return self.get(f'{self.company_prefix}/setup/materials/pricingTiers/{id}')
+
+    def get_all_pricing_tiers(self, params=None, columns=None):
+        return self._get_all(self.get_pricing_tiers_page, params, columns)
+
+    def get_pricing_tiers_page(self, page, page_size, params=None, columns=None):
+        return self._get_page(f'{self.company_prefix}/setup/materials/pricingTiers/', page, page_size, params=params, columns=columns)
 
     def headers(self, **kwargs):
         if datetime.now() + timedelta(seconds=4) >= self.expires:
@@ -234,6 +221,26 @@ class SimProApi(ApiBase):
         return {'Authorization': f'{self.token_type} {self.access_token}',
                 'Content-Type': 'application/json'}
 
+    def _get_all(self, page_getter, params=None, columns=None):
+        def next_page(page_number):
+            ret = page_getter(page=page_number, page_size=self.MAX_PAGE_SIZE, params=params, columns=columns)
+            return ret['items'], ret['page'] < ret['pages']
+
+        return get_all_from_pages(next_page)
+
+    def _get_page(self, path, page, page_size, params=None, columns=None):
+        params={**dict(page=page, pageSize=page_size), **(params or {})}
+        if columns:
+            params['columns'] = ','.join(columns)
+
+        items, headers = self.get(path,
+                params=params,
+                response_handler=json_headers_response_hander
+                )
+
+        return dict(items=items, total_count=int(headers['Result-Total']), pages=int(headers['Result-Pages']),
+                page_size=int(headers.get('Result-Count', 0)), page=page)
+
     def _handle_token_call(self, data):
         logger_in = ApiBase(self.base_url)
         resp = logger_in.post('oauth2/token', data=data)
@@ -242,6 +249,7 @@ class SimProApi(ApiBase):
         self.token_type = resp['token_type']
         self.expires = datetime.now() + timedelta(seconds=resp['expires_in'])
         logger.info(f'simPRO token expires {self.expires.isoformat()}')
+
 
 class SimProCatelogue(object):
     def __init__(self, api, columns = [], updating=True):
@@ -280,6 +288,32 @@ class SimProCatelogue(object):
     def _params(self, params={}):
         return {**params, **{'columns': self.columns}} if self.columns else params
 
+#class SimProCatelogueGroupTree(object):
+#    def __init__(self, api, rootgoups):
+#        self.rootgoups = rootgoups
+#
+#    def tree(self):
+#        def children(parent_id):
+#            return simpro.get_all_catelogue_groups(params={'ParentGroup.ID': parent_id})
+#
+#        return list(map(lambda g: {**g: **dict(children=children(g['ID']))}, rootgoups)
+#
+#def group_tree(groups):
+#    def add_children(group):
+#        children = api.get_all_catelogue_groups(params={'ParentGroup.ID': group['ID']})
+#        if children:
+#            group['children'] = children
+
+#def to_tree(groups):
+#    def get_children(parent_id)
+#         children = api.get_all_catelogue_groups(params={'ParentGroup.ID': parent_id})
+#         return map(lambda i: {**i, **dict(children=list(get_children(i['ID'])))}, groups)
+
+
+
+
+
+
 class SimProCatelogueGroup(object):
     def __init__(self, api):
         self.api = api
@@ -306,6 +340,14 @@ class SimProCatelogueGroup(object):
     @staticmethod
     def _is_group_child_of_parent(group, parent_id):
         return group.get('ParentGroup', {}).get('ID', 0) == parent_id
+
+    @staticmethod
+    def to_tree(api, items):
+        def children(parent_id):
+           c = api.get_all_catelogue_groups(params={'ParentGroup.ID': parent_id})
+           return map(lambda i: {**i, **dict(children=list(children(i['ID'])))}, c)
+        return list(map(lambda i: {**i, **dict(children=list(children(i['ID'])))}, items))
+
 
 class SimProStorageDevice(object):
     def __init__(self, api):
