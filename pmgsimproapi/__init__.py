@@ -5,11 +5,14 @@ from os.path import basename
 from base64 import b64encode
 from pmgrestclient.paging import get_all_from_pages, Cache
 from .util import to_tree
+from collections import namedtuple
 
 logger = getLogger(__name__)
 
 class NotLoggedInError(Exception):
     pass
+
+Page = namedtuple('Page', 'items page_number number_of_pages total_count')
 
 class SimProApi(ApiBase):
     MAX_PAGE_SIZE = 250
@@ -38,6 +41,28 @@ class SimProApi(ApiBase):
                 'password': password,
                 }
         self._handle_token_call(data)
+
+    def get_job_pages(self, page_size, params=None, columns=None):
+        page_number = 1
+        while True:
+            yield self._get_page(f'{self.company_prefix}/jobs/', page_number, page_size,
+                params=params, columns=columns)
+            page_number += 1
+
+    def get_invoice_pages(self, page_size, params=None, columns=None):
+        page_number = 1
+        while True:
+            page = self._get_page(f'{self.company_prefix}/customerInvoices/',
+                    page_number, page_size, params=params, columns=columns)
+            yield page
+            page_number += 1
+            if page_number >= page.number_of_pages:
+                break
+
+    def get_site(self, site_id):
+        return self.get(f'{self.company_prefix}/sites/{site_id}')
+
+
 
     def _paging_get_all(self, path, **kwargs): 
         given_params = kwargs.get('params') or {} # different from straight default because None might have been passed
@@ -238,8 +263,12 @@ class SimProApi(ApiBase):
                 response_handler=json_headers_response_hander
                 )
 
-        return dict(items=items, total_count=int(headers['Result-Total']), pages=int(headers['Result-Pages']),
-                page_size=int(headers.get('Result-Count', 0)), page=page)
+        return Page(items=items, page_number=page, number_of_pages=int(headers['Result-Pages']),
+                total_count=int(headers['Result-Total']))
+
+
+#        return dict(items=items, total_count=int(headers['Result-Total']), pages=int(headers['Result-Pages']),
+#                page_size=int(headers.get('Result-Count', 0)), page=page)
 
     def _handle_token_call(self, data):
         logger_in = ApiBase(self.base_url)
