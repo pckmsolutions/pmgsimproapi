@@ -1,6 +1,9 @@
 import requests
 from collections import namedtuple
-from datetime import datetime, timezone
+from datetime import  timezone
+from logging import getLogger
+
+logger = getLogger(__name__)
 
 Page = namedtuple('Page', 'items page_number number_of_pages total_count')
 
@@ -68,6 +71,8 @@ class SimProApi:
 
             if resp.status_code != requests.status_codes.codes['unauthorized']:
                 resp.raise_for_status()
+
+            logger.warning('Request unauthorised - attempting to reconnect')
 
             token_type, access_token = handle_reconnect()
     

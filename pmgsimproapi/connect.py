@@ -3,16 +3,17 @@ from datetime import datetime, timedelta
 from getpass import getpass
 from requests.exceptions import HTTPError
 from logging import getLogger
+from urllib.parse import urlparse, urljoin
 
 from .api import SimProApi
 
-token_url_suffix = 'oauth2/token'
+#token_url_suffix = 'oauth2/token'
 api_url_suffix = 'api/v1.0'
 logger = getLogger(__name__)
 
 class SimProConnect:
-    def __init__(self, base_url, client_id, client_secret, company):
-        self.base_url = base_url
+    def __init__(self, token_url, client_id, client_secret, company):
+        self.token_url = token_url
         self.client_id = client_id
         self.client_secret = client_secret
         self.company = company
@@ -29,6 +30,7 @@ class SimProConnect:
         return self.create_api()
     
     def _handle_reconnect(self):
+        logger.info('Reconnecting using refresh token.')
         token_config = self.fetch_tokens(
                 refresh_token=self.token_config['refresh_token'])
         if not token_config:
@@ -53,7 +55,7 @@ class SimProConnect:
             args['grant_type'] = 'refresh_token'
             args['refresh_token'] = refresh_token
     
-        resp = requests.post('/'.join((self.base_url, token_url_suffix),), data=args)
+        resp = requests.post(self.token_url, data=args)
         if not resp.ok:
             logger.error(f'Error feting tokens {resp.status_code} / {resp.text[:100]}.')
             return None
@@ -68,8 +70,9 @@ class SimProConnect:
         access_token = self.token_config['access_token']
         token_type = self.token_config['token_type']
     
-        base_url = '/'.join((self.base_url,
-            api_url_suffix, 'companies', self.company),)
+        parse = urlparse(self.token_url)
+        new_path = '/'.join((api_url_suffix, 'companies', self.company),)
+        base_url = urljoin(parse.geturl()[:-len(parse.path)], new_path)
     
         return SimProApi(base_url, token_type, access_token, self._handle_reconnect)
 
