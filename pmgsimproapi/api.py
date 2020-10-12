@@ -77,33 +77,34 @@ class SimProApi:
         async def wrapper(*args, **kwargs):
             headers = kwargs.pop('headers',{})
             headers.update(self.base_headers)
-            resp = await f(*args, headers=headers, **kwargs)
 
-            if resp.status == 200:
-                json = await resp.json() 
-                return (json if not with_headers
-                        else (json, resp.headers))
+            attempts = 0
+            while True:
+                resp = await f(*args, headers=headers, **kwargs)
 
-            if handle_reconnect is None:
-                resp.raise_for_status()
+                if resp.status == 200:
+                    json = await resp.json() 
+                    return (json if not with_headers
+                            else (json, resp.headers))
 
-            if resp.status != requests.status_codes.codes['unauthorized']:
-                resp.raise_for_status()
+                if handle_reconnect is None or attempts > 0:
+                    resp.raise_for_status()
 
-            logger.warning('Request unauthorised - attempting to reconnect')
+                attemps += 1
 
-            token_type, access_token = handle_reconnect()
-            self.base_headers = simpro_headers(token_type, access_token)
-            headers.update(self.base_headers)
+                if resp.status != requests.status_codes.codes['unauthorized']:
+                    resp.raise_for_status()
+
+                logger.warning('Request unauthorised - attempting to reconnect')
+
+                token_type, access_token = handle_reconnect()
+                self.base_headers = simpro_headers(token_type, access_token)
+                headers.update(self.base_headers)
     
-            if not token_type or not access_token:
-                # original error
-                resp.raise_for_status()
+                if not token_type or not access_token:
+                    # original error
+                    resp.raise_for_status()
     
-            resp = await f(*args, headers=headers, **kwargs)
-            if resp != 200:
-                resp.raise_for_status()
-            return await resp.json()
         return wrapper
 
 def simpro_headers(token_type, access_token):
