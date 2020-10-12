@@ -43,6 +43,7 @@ class SimProConnect:
             return None, None
     
         self.token_config = token_config
+
         if self.new_token_callable is not None:
             self.new_token_callable(self.token_config)
         return (self.token_config['token_type'],

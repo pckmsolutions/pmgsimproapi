@@ -18,13 +18,10 @@ class SimProApi:
             handle_reconnect=None):
         self.aiohttp_session = aiohttp_session
         self.base_url = base_url
-        self._set_callers(token_type, access_token, handle_reconnect)
-
-    def _set_callers(self, token_type, access_token, handle_reconnect):
-        hdrs = headers(token_type, access_token)
-        self.get = self._resp_wrap(self.aiohttp_session.get, hdrs, handle_reconnect)
+        self.base_headers = _headers(token_type, access_token)
+        self.get = self._resp_wrap(self.aiohttp_session.get, handle_reconnect)
         self.get_with_headers = self._resp_wrap(
-                self.aiohttp_session.get, hdrs, handle_reconnect, with_headers=True)
+                self.aiohttp_session.get, handle_reconnect, with_headers=True)
 
     async def get_invoice_pages(self, *,
             page_size=None, params=None, modified_since=None):
@@ -76,10 +73,10 @@ class SimProApi:
     def _path(self, suffix):
         return self.base_url + '/' + suffix
 
-    def _resp_wrap(self, f, headers, handle_reconnect, *, with_headers=False):
+    def _resp_wrap(self, f, handle_reconnect, *, with_headers=False):
         async def wrapper(*args, **kwargs):
             _headers = kwargs.pop('headers',{})
-            _headers.update(headers)
+            _headers.update(self.base_headers)
             resp = await f(*args, headers=_headers, **kwargs)
 
             if resp.status == 200:
@@ -95,21 +92,20 @@ class SimProApi:
 
             logger.warning('Request unauthorised - attempting to reconnect')
 
-            token_type, access_token = handle_reconnect()
+            self.base_headers = _headers(*handle_reconnect())
+            _headers.update(self.base_headers)
     
             if not token_type or not access_token:
                 # original error
                 resp.raise_for_status()
     
-            self._set_callers(token_type, access_token, handle_reconnect)
-
             resp = await f(*args, headers=_headers, **kwargs)
             if resp != 200:
                 resp.raise_for_status()
             return await resp.json()
         return wrapper
 
-def headers(token_type, access_token):
+def _headers(token_type, access_token):
     return {'Authorization': f'{token_type} {access_token}',
             'Content-Type': 'application/json'}
 
