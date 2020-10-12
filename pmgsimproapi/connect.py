@@ -7,16 +7,18 @@ from urllib.parse import urlparse, urljoin
 
 from .api import SimProApi
 
-#token_url_suffix = 'oauth2/token'
 api_url_suffix = 'api/v1.0'
 logger = getLogger(__name__)
 
 class SimProConnect:
-    def __init__(self, token_url, client_id, client_secret, company):
+    def __init__(self, aiohttp_session, token_url, client_id, client_secret,
+            company, new_token_callable = None):
+        self.aiohttp_session = aiohttp_session
         self.token_url = token_url
         self.client_id = client_id
         self.client_secret = client_secret
         self.company = company
+        self.new_token_callable = new_token_callable
         self.token_config = None
 
     def token_config_connect(self, token_config):
@@ -24,8 +26,11 @@ class SimProConnect:
         return self.create_api()
 
     def cli_connect(self, user=None, password=None):
-        user = input('simPro User: ')
-        password = getpass('simPro Password: ')
+        if user is None:
+            user = input('simPro User: ')
+            password = None
+        if password is None:
+            password = getpass('simPro Password: ')
         self.token_config = self.fetch_tokens(username=user, password=password)
         return self.create_api()
     
@@ -38,6 +43,8 @@ class SimProConnect:
             return None, None
     
         self.token_config = token_config
+        if self.new_token_callable is not None:
+            self.new_token_callable(self.token_config)
         return (self.token_config['token_type'],
                 self.token_config['access_token'])
     
@@ -74,5 +81,5 @@ class SimProConnect:
         new_path = '/'.join((api_url_suffix, 'companies', self.company),)
         base_url = urljoin(parse.geturl()[:-len(parse.path)], new_path)
     
-        return SimProApi(base_url, token_type, access_token, self._handle_reconnect)
+        return SimProApi(self.aiohttp_session, base_url, token_type, access_token, self._handle_reconnect)
 
