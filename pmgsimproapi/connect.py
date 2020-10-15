@@ -6,6 +6,7 @@ from logging import getLogger
 from urllib.parse import urlparse, urljoin
 
 from .api import SimProApi
+from .exceptions import LogonFailure
 
 api_url_suffix = 'api/v1.0'
 logger = getLogger(__name__)
@@ -66,6 +67,8 @@ class SimProConnect:
         resp = requests.post(self.token_url, data=args)
         if not resp.ok:
             logger.error(f'Error feting tokens {resp.status_code} / {resp.text[:100]}.')
+            if resp.status_code == 400 or resp.status_code == 401:
+                raise LogonFailure()
             return None
 
         return resp.json()

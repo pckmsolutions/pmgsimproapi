@@ -2,6 +2,7 @@ import requests
 from collections import namedtuple
 from datetime import  timezone
 from logging import getLogger
+from functools import wraps
 
 logger = getLogger(__name__)
 
@@ -90,7 +91,7 @@ class SimProApi:
                 if handle_reconnect is None or attempts > 0:
                     resp.raise_for_status()
 
-                attemps += 1
+                attempts += 1
 
                 if resp.status != requests.status_codes.codes['unauthorized']:
                     resp.raise_for_status()
