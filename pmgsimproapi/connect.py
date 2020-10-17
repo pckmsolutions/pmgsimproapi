@@ -51,7 +51,7 @@ class SimProConnect:
         #        self.token_config['access_token'])
 
         return _header_args(token_type=self.token_config['token_type'],
-                access_token=self.token_config['access_token']),
+                access_token=self.token_config['access_token'])
     
     def fetch_tokens(self, *, username=None, password=None, refresh_token=None):
         args = {'client_id': self.client_id,
@@ -94,5 +94,5 @@ class SimProConnect:
                 self._handle_reconnect)
 
 def _header_args(*, token_type, access_token):
-    return locals()
+    return {'token_type': token_type, 'access_token': access_token}
 
