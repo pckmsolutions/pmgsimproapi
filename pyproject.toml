@@ -2,10 +2,3 @@
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.pytest.ini_options]
-testpaths = [
-    "tests"
-]
-filterwarnings = [
-    "ignore:\"@coroutine\" decorator is deprecated:DeprecationWarning"
-]
