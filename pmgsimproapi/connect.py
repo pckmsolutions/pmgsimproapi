@@ -41,14 +41,17 @@ class SimProConnect:
                 refresh_token=self.token_config['refresh_token'])
         if not token_config:
             logger.error('Failed to reconnect.')
-            return None, None
+            return None
     
         self.token_config = token_config
 
         if self.new_token_callable is not None:
             self.new_token_callable(self.token_config)
-        return (self.token_config['token_type'],
-                self.token_config['access_token'])
+        #return (self.token_config['token_type'],
+        #        self.token_config['access_token'])
+
+        return _header_args(token_type=self.token_config['token_type'],
+                access_token=self.token_config['access_token']),
     
     def fetch_tokens(self, *, username=None, password=None, refresh_token=None):
         args = {'client_id': self.client_id,
@@ -85,5 +88,11 @@ class SimProConnect:
         new_path = '/'.join((api_url_suffix, 'companies', self.company),)
         base_url = urljoin(parse.geturl()[:-len(parse.path)], new_path)
     
-        return SimProApi(self.aiohttp_session, base_url, token_type, access_token, self._handle_reconnect)
+        return SimProApi(self.aiohttp_session,
+                base_url,
+                _header_args(token_type=token_type, access_token=access_token),
+                self._handle_reconnect)
+
+def _header_args(*, token_type, access_token):
+    return locals()
 
