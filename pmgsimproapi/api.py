@@ -1,4 +1,3 @@
-import requests
 from collections import namedtuple
 from datetime import  timezone
 from logging import getLogger
@@ -20,7 +19,7 @@ class SimProApi(ApiBase):
             handle_reconnect=None):
         super().__init__(aiohttp_session,
                 base_url,
-                header_args,
+                header_args=header_args,
                 handle_reconnect=handle_reconnect)
 
     async def get_invoice_pages(self, *,
