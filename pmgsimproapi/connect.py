@@ -5,14 +5,19 @@ from requests.exceptions import HTTPError
 from logging import getLogger
 from urllib.parse import urlparse, urljoin
 
-from .api import SimProApi
 from .exceptions import LogonFailure
 
 api_url_suffix = 'api/v1.0'
 logger = getLogger(__name__)
 
+try:
+    from .api import SimProApi
+except ModuleNotFoundError:
+    logger.warn('Skipping asyncio support')
+
+
 class SimProConnect:
-    def __init__(self, aiohttp_session, token_url, client_id, client_secret,
+    def __init__(self, *, aiohttp_session, token_url, client_id, client_secret,
             company, new_token_callable = None):
         self.aiohttp_session = aiohttp_session
         self.token_url = token_url
@@ -56,20 +61,23 @@ class SimProConnect:
     def fetch_tokens(self, *, username=None, password=None, refresh_token=None):
         args = {'client_id': self.client_id,
                 'client_secret': self.client_secret}
-    
+
         if username is not None:
             assert password is not None
             assert refresh_token is None
+
             args['grant_type'] = 'password'
             args['username'] = username
             args['password'] = password
         else:
+            assert refresh_token is not None
             args['grant_type'] = 'refresh_token'
             args['refresh_token'] = refresh_token
-    
+
         resp = requests.post(self.token_url, data=args)
         if not resp.ok:
-            logger.error(f'Error feting tokens {resp.status_code} / {resp.text[:100]}.')
+            logger.error(f'Error feting tokens {resp.status_code}'
+                    + ' / {resp.text[:100]}.')
             if resp.status_code == 400 or resp.status_code == 401:
                 raise LogonFailure()
             return None
