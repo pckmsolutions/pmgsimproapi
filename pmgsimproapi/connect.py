@@ -3,11 +3,12 @@ from datetime import datetime, timedelta
 from getpass import getpass
 from requests.exceptions import HTTPError
 from logging import getLogger
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin
 
 from .exceptions import LogonFailure
 
 api_url_suffix = 'api/v1.0'
+token_url_suffix = 'oauth2/token'
 logger = getLogger(__name__)
 
 try:
@@ -17,10 +18,10 @@ except ModuleNotFoundError:
 
 
 class SimProConnect:
-    def __init__(self, *, aiohttp_session, token_url, client_id, client_secret,
+    def __init__(self, *, aiohttp_session, base_url, client_id, client_secret,
             company, new_token_callable = None):
         self.aiohttp_session = aiohttp_session
-        self.token_url = token_url
+        self.base_url = base_url
         self.client_id = client_id
         self.client_secret = client_secret
         self.company = company
@@ -74,7 +75,8 @@ class SimProConnect:
             args['grant_type'] = 'refresh_token'
             args['refresh_token'] = refresh_token
 
-        resp = requests.post(self.token_url, data=args)
+        resp = requests.post('/'.join((self.base_url, token_url_suffix),), 
+                data=args)
         if not resp.ok:
             logger.error(f'Error feting tokens {resp.status_code}'
                     + ' / {resp.text[:100]}.')
@@ -92,9 +94,8 @@ class SimProConnect:
         access_token = self.token_config['access_token']
         token_type = self.token_config['token_type']
     
-        parse = urlparse(self.token_url)
-        new_path = '/'.join((api_url_suffix, 'companies', self.company),)
-        base_url = urljoin(parse.geturl()[:-len(parse.path)], new_path)
+        base_url = urljoin(self.base_url,
+                '/'.join((api_url_suffix, 'companies', self.company),))
     
         return SimProApi(self.aiohttp_session,
                 base_url,
