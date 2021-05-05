@@ -9,6 +9,8 @@ logger = getLogger(__name__)
 
 Page = namedtuple('Page', 'items page_number number_of_pages total_count')
 
+DEFAULT_PAGE_SIZE = 50
+
 def params_add_columns(*columns, params:Optional[Dict]=None):
     if not params:
         params = {}
@@ -22,6 +24,53 @@ class SimProApi(ApiBase):
                 base_url,
                 header_args=header_args,
                 handle_reconnect=handle_reconnect)
+
+    # Setup
+    async def get_setup_project_custom_fields(self,*,
+            name: Optional[str] = None,
+            show_for_leads: Optional[bool] = None,
+            show_for_quotes: Optional[bool] = None,
+            show_for_jobs: Optional[bool] = None,
+            show_for_recurring: Optional[bool] = None,
+            ):
+        params={}
+
+        if name is not None:
+            params['Name'] = name
+
+        def add_show_for(subtype, show):
+            if show is not None:
+                params[f'ShowFor.{subtype}'] = 'true' if show else 'false'
+
+        add_show_for('Leads', show_for_leads)
+        add_show_for('Quotes', show_for_quotes)
+        add_show_for('Jobs', show_for_jobs)
+        add_show_for('Recurring', show_for_recurring)
+        #breakpoint()
+
+        return await self.get(f'setup/customFields/projects/',
+                params=params)
+
+    async def create_setup_project_custom_fields(self, *,
+            name: str,
+            type: Optional[str] = "Text",
+            show_for_leads: Optional[bool] = False,
+            show_for_quotes: Optional[bool] = False,
+            show_for_jobs: Optional[bool] = False,
+            show_for_recurring: Optional[bool] = False,
+            is_mandatory: Optional[bool] = False,
+            ):
+        return await self.post(f'setup/customFields/projects/', json={
+            "Name": name,
+            "Type": type,
+            "IsMandatory": is_mandatory,
+            "ShowFor": {
+                "Leads": show_for_leads,
+                "Quotes": show_for_quotes,
+                "Jobs": show_for_jobs,
+                "Recurring": show_for_recurring
+                }
+            })
 
     # Invoices
     async def get_invoice_pages(self, *,
@@ -204,6 +253,23 @@ class SimProApi(ApiBase):
     async def get_lead(self, lead_id: int):
         return await self.get(f'leads/{lead_id}')
 
+    async def get_lead_custom_fields(self, lead_id):
+        return await self.get(f'leads/{lead_id}/customFields/')
+
+    async def get_lead_custom_field(self, lead_id, custom_field_id):
+        return await self.get(f'leads/{lead_id}/customFields/{custom_field_id}')
+
+    async def update_lead_custom_field(self,
+            lead_id: int,
+            custom_field_id: int,
+            value: str):
+        return await self.patch(
+                f'leads/{lead_id}/customFields/{custom_field_id}',
+                json={
+                    "Value": value
+                    }
+                )
+
     # Untilities
     async def _get_pages(self, page_callable, *,
             page_size=None, params=None, modified_since=None):
@@ -221,9 +287,8 @@ class SimProApi(ApiBase):
 
     async def _get_page(self, path, page_number, page_size, params, modified_since):
         params = params or {}
-        if page_size is not None:
-            params['page'] = page_number or 1
-            params['pageSize'] = page_size
+        params['page'] = page_number or 1
+        params['pageSize'] = page_size or DEFAULT_PAGE_SIZE
 
         in_headers = {}
         if modified_since is not None:
