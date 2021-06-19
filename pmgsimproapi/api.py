@@ -4,12 +4,15 @@ from logging import getLogger
 from functools import wraps
 from pmgaiorest import ApiBase
 from typing import Optional, Dict
+from logging import getLogger
 
 logger = getLogger(__name__)
 
 Page = namedtuple('Page', 'items page_number number_of_pages total_count')
 
 DEFAULT_PAGE_SIZE = 50
+
+logger = getLogger(__name__)
 
 def params_add_columns(*columns, params:Optional[Dict]=None):
     if not params:
@@ -46,7 +49,6 @@ class SimProApi(ApiBase):
         add_show_for('Quotes', show_for_quotes)
         add_show_for('Jobs', show_for_jobs)
         add_show_for('Recurring', show_for_recurring)
-        #breakpoint()
 
         return await self.get(f'setup/customFields/projects/',
                 params=params)
@@ -105,6 +107,30 @@ class SimProApi(ApiBase):
             page_number=1, page_size=None, params=None, modified_since=None):
         return await self._get_page('prebuildGroups/',
                     page_number, page_size, params, modified_since)
+
+    async def get_prebuild_group(self, *, name: Optional[str] = None,
+            parent_id: Optional[int] = None):
+        assert name is not None
+
+        params={'Name': name}
+        if parent_id is not None:
+            params['ParentGroup.ID'] = parent_id
+        prebuild_page = await self.get_prebuild_group_page(params=params)
+        if prebuild_page.total_count > 1:
+            logger.error('Got multiple prebuild groups')
+            return None
+
+        if prebuild_page.total_count < 1:
+            logger.error('Prebuild group not found')
+            return None
+
+        return prebuild_page.items[0]
+
+    async def create_prebuild_group(self, *, name, parent_id):
+        return await self.post('prebuildGroups/', json={
+            'Name': name,
+            'ParentGroup': parent_id,
+            })
 
     async def get_prebuild_std_price_pages(self, *,
             page_size=None, params=None, modified_since=None,
@@ -169,20 +195,20 @@ class SimProApi(ApiBase):
         add_setter('Name', name)
         add_setter('Description', description)
         add_setter('TotalEx', total_ex)
-        import pprint; pprint.pprint(json)
 
         return await self.patch(f'prebuilds/standardPrice/{prebuild_id}', json=json)
 
     async def get_prebuild_catalogs(self, prebuild_id:int):
         return await self.get(f'prebuilds/{prebuild_id}/catalogs/')
 
-    async def create_prebuild_catelog(self, prebuild_id:int, *, catalog_id, quantity):
+    async def create_prebuild_catalog(self, prebuild_id:int, *,
+            catalog_id, quantity):
         return await self.post(f'prebuilds/{prebuild_id}/catalogs/', json={
             'Catalog': catalog_id,
             'Quantity': quantity,
             })
 
-    async def del_prebuild_catelog(self, prebuild_id:int, catalog_id:int):
+    async def del_prebuild_catalog(self, prebuild_id:int, catalog_id:int):
         return await self.delete(f'prebuilds/{prebuild_id}/catalogs/{catalog_id}')
 
     async def get_prebuild_attachments(self, prebuild_id:int):
@@ -191,10 +217,11 @@ class SimProApi(ApiBase):
     async def del_prebuild_attachment(self, prebuild_id:int, attachment_id:int):
         return await self.delete(f'prebuilds/{prebuild_id}/attachments/files/{attachment_id}')
 
-    async def add_prebuild_attachment(self, prebuild_id:int, *, name, content):
+    async def add_prebuild_attachment(self, prebuild_id:int, *, name, content, default):
         return await self.post(f'prebuilds/{prebuild_id}/attachments/files/', json={
             'Filename': name,
             'Base64Data': content,
+            'Default': default
             })
      
 
@@ -213,8 +240,34 @@ class SimProApi(ApiBase):
         return await self._get_page('catalogs/',
                     page_number, page_size, params, modified_since)
 
-    async def get_catalog(self, *, part_no:str):
-        return await self.get(f'catalogs', params={'PartNo': part_no})
+    async def get_catalog(self, *, part_no:str, params=None):
+        params = params or {}
+        params['PartNo'] = part_no
+
+        catalogs = await self.get(f'catalogs/', params=params)
+        if len(catalogs) > 1:
+            logger.error('Got multiple catalogs for part no %s', part_no)
+            return None
+
+        if len(catalogs) < 1:
+            logger.error('Catalog part no %s not found', part_no)
+            return None
+
+        return catalogs[0]
+
+    async def update_catalog(self, *, catalog_id: int,
+            estimated_time: Optional[int] = None):
+        json = {}
+        def add_setter(name, val):
+            if val is not None:
+                json[name] = val
+        add_setter('EstimatedTime', estimated_time)
+        if not json:
+            logger.error('Required at least 1 field to update catalog' +
+            '(catalog_id: %d)', catalog_id)
+            return None
+
+        return await self.patch(f'catalogs/{catalog_id}', json=json)
 
     # Quotes
     async def get_quote_pages(self, *,

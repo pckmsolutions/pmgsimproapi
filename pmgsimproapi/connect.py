@@ -78,8 +78,8 @@ class SimProConnect:
         resp = requests.post('/'.join((self.base_url, token_url_suffix),), 
                 data=args)
         if not resp.ok:
-            logger.error(f'Error feting tokens {resp.status_code}'
-                    + ' / {resp.text[:100]}.')
+            logger.error('Error fetching tokens {} / {}.',
+                    resp.status_code, resp.text[:100])
             if resp.status_code == 400 or resp.status_code == 401:
                 raise LogonFailure()
             return None
